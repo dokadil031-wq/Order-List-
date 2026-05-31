@@ -1,0 +1,6 @@
+{
+  "name": "Order List",
+  "description": "An application to generate order lists using natural language, manage buyers and wholesalers, and track order statuses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
