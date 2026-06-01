@@ -35,7 +35,8 @@ data class GenerationConfig(
     val responseSchema: JsonObject? = null,
     val temperature: Float? = null,
     val topP: Float? = null,
-    val topK: Int? = null
+    val topK: Int? = null,
+    val maxOutputTokens: Int? = null
 )
 
 @Serializable

@@ -48,7 +48,8 @@ fun AppNavigation(
             GenerateOrderScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onOrderCreated = { navController.popBackStack() }
+                onOrderCreated = { navController.popBackStack() },
+                onNavigateToChat = { userId -> navController.navigate("chat/$userId") }
             )
         }
 

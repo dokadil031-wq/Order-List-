@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.AccountCircle
@@ -485,6 +486,7 @@ fun GlobalSearchContent(
     onNavigateToChat: (String) -> Unit
 ) {
     var globalQuery by remember { mutableStateOf("") }
+    var contactToInvite by remember { mutableStateOf<Pair<String, String>?>(null) }
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -732,15 +734,7 @@ fun GlobalSearchContent(
                                 }
                                 Button(
                                     onClick = { 
-                                        val inviteUri = android.net.Uri.parse("smsto:$phoneNumber")
-                                        val smsIntent = android.content.Intent(android.content.Intent.ACTION_SENDTO, inviteUri).apply {
-                                            putExtra("sms_body", "Hey $contactName! Let's chat and manage orders on the Order List App. Download it now.")
-                                        }
-                                        try {
-                                            context.startActivity(smsIntent)
-                                        } catch (e: Exception) {
-                                            android.widget.Toast.makeText(context, "No messaging app found", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
+                                        contactToInvite = Pair(contactName, phoneNumber)
                                     },
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
@@ -760,6 +754,44 @@ fun GlobalSearchContent(
                 }
             }
         }
+        if (contactToInvite != null) {
+            val contact = contactToInvite!!
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { contactToInvite = null },
+                title = { Text("Invite to App", style = MaterialTheme.typography.titleLarge) },
+                text = { Text("How would you like to invite ${contact.first} to join the app?", style = MaterialTheme.typography.bodyMedium) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        val waUri = android.net.Uri.parse("https://api.whatsapp.com/send?phone=${contact.second}&text=" + android.net.Uri.encode("Hey ${contact.first}! Let's chat and manage orders on the Order List App. Download it now: https://example.com/download"))
+                        val waIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, waUri)
+                        try {
+                            context.startActivity(waIntent)
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "WhatsApp not installed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        contactToInvite = null
+                    }) {
+                        Text("WhatsApp", color = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        val inviteUri = android.net.Uri.parse("smsto:${contact.second}")
+                        val smsIntent = android.content.Intent(android.content.Intent.ACTION_SENDTO, inviteUri).apply {
+                            putExtra("sms_body", "Hey ${contact.first}! Let's chat and manage orders on the Order List App. Download it now: https://example.com/download")
+                        }
+                        try {
+                            context.startActivity(smsIntent)
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "No messaging app found", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        contactToInvite = null
+                    }) {
+                        Text("SMS", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -775,8 +807,9 @@ fun DashboardContent(
     val buyerOrders by viewModel.currentBuyerOrders.collectAsStateWithLifecycle()
     val sellerOrders by viewModel.currentSellerOrders.collectAsStateWithLifecycle()
 
-    val filteredBuyerOrders = remember(buyerOrders, searchQuery) {
-        if (searchQuery.isBlank()) buyerOrders else buyerOrders.filter {
+    val sendOrders = remember(buyerOrders, searchQuery) {
+        val base = buyerOrders.filter { it.order?.sellerId != "DOWNLOADED" && it.order?.sellerId != "CANCELLED" }
+        if (searchQuery.isBlank()) base else base.filter {
             it.seller?.name.orEmpty().contains(searchQuery, ignoreCase = true) ||
             it.seller?.shopName.orEmpty().contains(searchQuery, ignoreCase = true) ||
             it.seller?.phoneNumber.orEmpty().contains(searchQuery, ignoreCase = true) ||
@@ -784,7 +817,7 @@ fun DashboardContent(
         }
     }
 
-    val filteredSellerOrders = remember(sellerOrders, searchQuery) {
+    val receiveOrders = remember(sellerOrders, searchQuery) {
         if (searchQuery.isBlank()) sellerOrders else sellerOrders.filter {
             it.buyer?.name.orEmpty().contains(searchQuery, ignoreCase = true) ||
             it.buyer?.shopName.orEmpty().contains(searchQuery, ignoreCase = true) ||
@@ -793,20 +826,45 @@ fun DashboardContent(
         }
     }
 
+    val downloadedOrders = remember(buyerOrders, searchQuery) {
+        val base = buyerOrders.filter { it.order?.sellerId == "DOWNLOADED" }
+        if (searchQuery.isBlank()) base else base.filter {
+            it.items?.any { item -> item.name.contains(searchQuery, ignoreCase = true) } ?: false
+        }
+    }
+
+    val cancelledOrders = remember(buyerOrders, searchQuery) {
+        val base = buyerOrders.filter { it.order?.sellerId == "CANCELLED" }
+        if (searchQuery.isBlank()) base else base.filter {
+            it.items?.any { item -> item.name.contains(searchQuery, ignoreCase = true) } ?: false
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = selectedTabIndex,
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = MaterialTheme.colorScheme.background,
+            edgePadding = 16.dp
         ) {
             Tab(
                 selected = selectedTabIndex == 0,
                 onClick = { selectedTabIndex = 0 },
-                text = { Text("Send Orders") }
+                text = { Text("Send") }
             )
             Tab(
                 selected = selectedTabIndex == 1,
                 onClick = { selectedTabIndex = 1 },
-                text = { Text("Receive Orders") }
+                text = { Text("Receive") }
+            )
+            Tab(
+                selected = selectedTabIndex == 2,
+                onClick = { selectedTabIndex = 2 },
+                text = { Text("Download") }
+            )
+            Tab(
+                selected = selectedTabIndex == 3,
+                onClick = { selectedTabIndex = 3 },
+                text = { Text("Cancel") }
             )
         }
         
@@ -832,23 +890,54 @@ fun DashboardContent(
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (selectedTabIndex == 0) {
-                items(filteredBuyerOrders) { orderWithDetails ->
-                    OrderCard(
-                        orderWithDetails = orderWithDetails,
-                        otherPartyName = orderWithDetails.seller?.name ?: "",
-                        onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
-                        onMessageClick = { onNavigateToChat(orderWithDetails.seller?.id ?: "") }
-                    )
+            when (selectedTabIndex) {
+                0 -> {
+                    items(sendOrders) { orderWithDetails ->
+                        val name = orderWithDetails.seller?.name
+                        val displayPartyName = if (orderWithDetails.order?.sellerId == "EXTERNAL") "External Shared Document" else if (name.isNullOrBlank()) "Unknown Contact" else name
+                        OrderCard(
+                            orderWithDetails = orderWithDetails,
+                            otherPartyName = displayPartyName,
+                            onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
+                            onMessageClick = { onNavigateToChat(orderWithDetails.seller?.id ?: "") },
+                            showChatButton = orderWithDetails.order?.sellerId != "EXTERNAL"
+                        )
+                    }
                 }
-            } else {
-                items(filteredSellerOrders) { orderWithDetails ->
-                    OrderCard(
-                        orderWithDetails = orderWithDetails,
-                        otherPartyName = orderWithDetails.buyer?.name ?: "",
-                        onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
-                        onMessageClick = { onNavigateToChat(orderWithDetails.buyer?.id ?: "") }
-                    )
+                1 -> {
+                    items(receiveOrders) { orderWithDetails ->
+                        val name = orderWithDetails.buyer?.name
+                        val displayPartyName = if (name.isNullOrBlank()) "Unknown Contact" else name
+                        OrderCard(
+                            orderWithDetails = orderWithDetails,
+                            otherPartyName = displayPartyName,
+                            onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
+                            onMessageClick = { onNavigateToChat(orderWithDetails.buyer?.id ?: "") },
+                            showChatButton = true
+                        )
+                    }
+                }
+                2 -> {
+                    items(downloadedOrders) { orderWithDetails ->
+                        OrderCard(
+                            orderWithDetails = orderWithDetails,
+                            otherPartyName = "Downloaded Document",
+                            onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
+                            onMessageClick = {},
+                            showChatButton = false
+                        )
+                    }
+                }
+                3 -> {
+                    items(cancelledOrders) { orderWithDetails ->
+                        OrderCard(
+                            orderWithDetails = orderWithDetails,
+                            otherPartyName = "Cancelled Document",
+                            onClick = { onNavigateToOrderDetails(orderWithDetails.order?.id ?: "") },
+                            onMessageClick = {},
+                            showChatButton = false
+                        )
+                    }
                 }
             }
         }
@@ -860,7 +949,8 @@ fun OrderCard(
     orderWithDetails: OrderWithDetails,
     otherPartyName: String,
     onClick: () -> Unit,
-    onMessageClick: () -> Unit
+    onMessageClick: () -> Unit,
+    showChatButton: Boolean = true
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
@@ -875,13 +965,16 @@ fun OrderCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("${orderWithDetails.items?.size ?: 0} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = onMessageClick,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth().height(40.dp)
-            ) {
-                Text("Message")
+            
+            if (showChatButton) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onMessageClick,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth().height(40.dp)
+                ) {
+                    Text("Message")
+                }
             }
         }
     }

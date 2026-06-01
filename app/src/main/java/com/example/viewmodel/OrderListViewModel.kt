@@ -176,10 +176,14 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
             try {
                 val apiKey = BuildConfig.GEMINI_API_KEY
                 
+                val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true; allowSpecialFloatingPointValues = true }
+                
                 val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = "Extract the order items and quantities from this text: $naturalLanguageText. ONLY return a JSON Array of objects, each object with 'name' and 'quantity' string keys. Nothing else like ```json")))),
+                    contents = listOf(Content(parts = listOf(Part(text = "Extract EVERY SINGLE order item and its exact quantity from this text. Do not summarize. List all items. Format as a JSON array of objects with keys 'name' and 'quantity'. Text: $naturalLanguageText")))),
                     generationConfig = GenerationConfig(
-                        temperature = 0.1f
+                        temperature = 0.0f,
+                        maxOutputTokens = 8192,
+                        responseMimeType = "application/json"
                     )
                 )
 
@@ -187,16 +191,17 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                 val responseText = response.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
                 val cleanText = responseText.replace("```json", "").replace("```", "").trim()
                 
-                // Ensure we only parse the array part
                 val startIndex = cleanText.indexOf('[')
                 val endIndex = cleanText.lastIndexOf(']')
                 val arrayString = if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
                     cleanText.substring(startIndex, endIndex + 1)
+                } else if (cleanText.isEmpty()) {
+                    "[]"
                 } else {
                     cleanText
                 }
                 
-                val jsonArray = Json.parseToJsonElement(arrayString).jsonArray
+                val jsonArray = jsonParser.parseToJsonElement(arrayString).jsonArray
                 val items = jsonArray.map { element ->
                     val obj = element.jsonObject
                     Pair(
@@ -218,6 +223,12 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         }
     }
 
+    fun createOrder(buyerId: String, sellerId: String, items: List<Pair<String, String>>) {
+        viewModelScope.launch {
+            repository.createOrder(buyerId, sellerId, items)
+        }
+    }
+
     fun updateOrderStatus(order: Order, status: String) {
         viewModelScope.launch {
             repository.updateOrderStatus(order, status)
@@ -236,6 +247,29 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         }
     }
 
+    val recentChatUserIds: kotlinx.coroutines.flow.Flow<List<String>> = _currentUser.flatMapLatest { user ->
+        if (user == null) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            repository.getMyRecentChatUsers(user.id)
+        }
+    }
+
+    val unreadChatUserIds: kotlinx.coroutines.flow.Flow<List<String>> = _currentUser.flatMapLatest { user ->
+        if (user == null) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            repository.getUnreadChatUsers(user.id)
+        }
+    }
+
+    fun markMessagesAsRead(senderId: String) {
+        val currentUserId = _currentUser.value?.id ?: return
+        viewModelScope.launch {
+            repository.markMessagesAsRead(senderId, currentUserId)
+        }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun getChatMessages(otherUserId: String): kotlinx.coroutines.flow.Flow<List<Message>> {
         return _currentUser.flatMapLatest { user ->
@@ -251,6 +285,46 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         val senderId = _currentUser.value?.id ?: return
         viewModelScope.launch {
             repository.sendMessage(senderId, receiverId, content)
+        }
+    }
+
+    fun editMessage(messageId: String, newContent: String) {
+        viewModelScope.launch {
+            repository.editMessage(messageId, newContent)
+        }
+    }
+
+    fun deleteMessageForMe(messageId: String, currentDeletedList: List<String>) {
+        val userId = _currentUser.value?.id ?: return
+        viewModelScope.launch {
+            repository.deleteMessageForMe(messageId, userId, currentDeletedList)
+        }
+    }
+
+    fun deleteMessageForEveryone(messageId: String) {
+        viewModelScope.launch {
+            repository.deleteMessageForEveryone(messageId)
+        }
+    }
+
+    fun clearChat(otherUserId: String) {
+        val userId = _currentUser.value?.id ?: return
+        viewModelScope.launch {
+            repository.clearChat(userId, otherUserId)
+        }
+    }
+
+    fun blockUser(blockUserId: String, currentBlockedList: List<String>) {
+        val userId = _currentUser.value?.id ?: return
+        viewModelScope.launch {
+            repository.blockUser(userId, blockUserId, currentBlockedList)
+        }
+    }
+
+    fun unblockUser(blockUserId: String, currentBlockedList: List<String>) {
+        val userId = _currentUser.value?.id ?: return
+        viewModelScope.launch {
+            repository.unblockUser(userId, blockUserId, currentBlockedList)
         }
     }
 }

@@ -213,9 +213,86 @@ class AppRepository() {
         db?.child("messages")?.child(messageId)?.setValue(message)
     }
 
+    suspend fun editMessage(messageId: String, newContent: String) {
+        db?.child("messages")?.child(messageId)?.child("content")?.setValue(newContent)
+        db?.child("messages")?.child(messageId)?.child("isEdited")?.setValue(true)
+    }
+
+    suspend fun deleteMessageForMe(messageId: String, currentUserId: String, currentDeletedList: List<String>) {
+        val newList = currentDeletedList + currentUserId
+        db?.child("messages")?.child(messageId)?.child("deletedForUserIds")?.setValue(newList)
+    }
+
+    suspend fun deleteMessageForEveryone(messageId: String) {
+        db?.child("messages")?.child(messageId)?.child("isDeletedForEveryone")?.setValue(true)
+        db?.child("messages")?.child(messageId)?.child("content")?.setValue("This message was deleted")
+    }
+
+    suspend fun clearChat(user1: String, user2: String) {
+        val snapshot = db?.child("messages")?.get()?.await()
+        snapshot?.children?.forEach { child ->
+            val msg = child.getValue(Message::class.java)
+            if (msg != null && ((msg.senderId == user1 && msg.receiverId == user2) || (msg.senderId == user2 && msg.receiverId == user1))) {
+                val newList = msg.deletedForUserIds + user1
+                child.ref.child("deletedForUserIds").setValue(newList)
+            }
+        }
+    }
+
+    suspend fun deleteChat(user1: String, user2: String) {
+        clearChat(user1, user2)
+    }
+
+    suspend fun blockUser(currentUserId: String, blockUserId: String, currentBlockedList: List<String>) {
+        val newList = currentBlockedList + blockUserId
+        db?.child("users")?.child(currentUserId)?.child("blockedUserIds")?.setValue(newList)
+    }
+
+    suspend fun unblockUser(currentUserId: String, blockUserId: String, currentBlockedList: List<String>) {
+        val newList = currentBlockedList - blockUserId
+        db?.child("users")?.child(currentUserId)?.child("blockedUserIds")?.setValue(newList)
+    }
+
     fun getMessages(user1: String, user2: String): Flow<List<Message>> = db?.child("messages")?.asFlow()?.map { snapshot ->
         snapshot?.children?.mapNotNull { it.getValue(Message::class.java) }
             ?.filter { (it.senderId == user1 && it.receiverId == user2) || (it.senderId == user2 && it.receiverId == user1) }
+            ?.filter { !it.deletedForUserIds.contains(user1) }
             ?.sortedBy { it.timestamp } ?: emptyList()
     } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    fun getMyRecentChatUsers(userId: String): Flow<List<String>> = db?.child("messages")?.asFlow()?.map { snapshot ->
+        val userIds = mutableMapOf<String, Long>()
+        snapshot?.children?.mapNotNull { it.getValue(Message::class.java) }?.forEach { message ->
+            if (!message.deletedForUserIds.contains(userId)) {
+                if (message.senderId == userId) {
+                    val current = userIds[message.receiverId] ?: 0L
+                    if (message.timestamp > current) userIds[message.receiverId] = message.timestamp
+                } else if (message.receiverId == userId) {
+                    val current = userIds[message.senderId] ?: 0L
+                    if (message.timestamp > current) userIds[message.senderId] = message.timestamp
+                }
+            }
+        }
+        userIds.entries.sortedByDescending { it.value }.map { it.key }
+    } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    fun getUnreadChatUsers(userId: String): Flow<List<String>> = db?.child("messages")?.asFlow()?.map { snapshot ->
+        val unreadSenders = mutableSetOf<String>()
+        snapshot?.children?.mapNotNull { it.getValue(Message::class.java) }?.forEach { message ->
+            if (!message.deletedForUserIds.contains(userId) && message.receiverId == userId && !message.isRead) {
+                unreadSenders.add(message.senderId)
+            }
+        }
+        unreadSenders.toList()
+    } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun markMessagesAsRead(senderId: String, currentUserId: String) {
+        val snapshot = db?.child("messages")?.get()?.await()
+        snapshot?.children?.forEach { child ->
+            val msg = child.getValue(Message::class.java)
+            if (msg != null && msg.senderId == senderId && msg.receiverId == currentUserId && !msg.isRead) {
+                child.ref.child("isRead").setValue(true)
+            }
+        }
+    }
 }

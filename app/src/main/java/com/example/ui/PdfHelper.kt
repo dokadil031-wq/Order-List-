@@ -13,10 +13,49 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.content.ContentValues
+import android.widget.Toast
 
 import com.example.data.User
 
 object PdfHelper {
+    fun copyToDownloads(context: Context, sourceUri: Uri) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "Order_${System.currentTimeMillis()}.pdf")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Orders")
+                }
+                val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    Toast.makeText(context, "Saved to Downloads", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val orderDir = File(downloadsDir, "Orders")
+                if (!orderDir.exists()) orderDir.mkdirs()
+                val destFile = File(orderDir, "Order_${System.currentTimeMillis()}.pdf")
+                FileOutputStream(destFile).use { outputStream ->
+                    context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                Toast.makeText(context, "Saved to Downloads", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "Failed to download", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun generateOrderPdf(context: Context, items: List<Pair<String, String>>, user: User?): Uri? {
         val pdfDocument = PdfDocument()
         val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4 size in points
@@ -69,23 +108,47 @@ object PdfHelper {
         paint.textSize = 14f
         paint.isFakeBoldText = false
         currentY += 25f
+        
+        var currentPageNumber = 1
+        var currentPage = page
+        var currentCanvas = canvas
+
         for ((name, qty) in items) {
             if (currentY > 800f) {
-                // simple pagination safety (ideally create a new page)
-                break 
+                // simple pagination safety (create a new page)
+                pdfDocument.finishPage(currentPage)
+                currentPageNumber++
+                
+                val newPageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                currentPage = pdfDocument.startPage(newPageInfo)
+                currentCanvas = currentPage.canvas
+                currentY = 50f
+                
+                // Redraw table header on new page
+                paint.textSize = 14f
+                paint.isFakeBoldText = true
+                currentCanvas.drawText("Item Name", 50f, currentY, paint)
+                currentCanvas.drawText("Quantity", 400f, currentY, paint)
+                
+                currentY += 15f
+                paint.strokeWidth = 2f
+                currentCanvas.drawLine(50f, currentY, 545f, currentY, paint)
+                
+                paint.isFakeBoldText = false
+                currentY += 25f
             }
-            canvas.drawText(name, 50f, currentY, paint)
-            canvas.drawText(qty, 400f, currentY, paint)
+            currentCanvas.drawText(name, 50f, currentY, paint)
+            currentCanvas.drawText(qty, 400f, currentY, paint)
             currentY += 30f
         }
 
         // Footer
-        canvas.drawLine(50f, currentY, 545f, currentY, paint)
+        currentCanvas.drawLine(50f, currentY, 545f, currentY, paint)
         currentY += 30f
         paint.isFakeBoldText = true
-        canvas.drawText("End of Order", 50f, currentY, paint)
+        currentCanvas.drawText("End of Order", 50f, currentY, paint)
 
-        pdfDocument.finishPage(page)
+        pdfDocument.finishPage(currentPage)
 
         // Write to file
         val fileDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Orders")

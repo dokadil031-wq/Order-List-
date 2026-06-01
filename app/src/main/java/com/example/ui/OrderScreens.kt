@@ -35,7 +35,8 @@ import androidx.compose.ui.text.input.ImeAction
 fun GenerateOrderScreen(
     viewModel: OrderListViewModel,
     onNavigateBack: () -> Unit,
-    onOrderCreated: () -> Unit
+    onOrderCreated: () -> Unit,
+    onNavigateToChat: (String) -> Unit
 ) {
     var orderText by remember { mutableStateOf("") }
     val isParsing by viewModel.isParsing.collectAsStateWithLifecycle()
@@ -44,6 +45,8 @@ fun GenerateOrderScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    var showUserSelection by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -137,39 +140,161 @@ fun GenerateOrderScreen(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { parsedItems = null },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text("Edit")
-                    }
-                    Button(
-                        onClick = {
-                            if (parsedItems != null) {
-                                val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
-                                if (pdfUri != null) {
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/pdf"
-                                        putExtra(Intent.EXTRA_STREAM, pdfUri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(intent, "Share PDF Order Document"))
-                                } else {
-                                    android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { 
+                                if (parsedItems != null) {
+                                    viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
                                 }
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Share")
-                        Spacer(Modifier.width(8.dp))
-                        Text("Send PDF")
+                                parsedItems = null 
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                if (parsedItems != null) {
+                                    val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
+                                    if (pdfUri != null) {
+                                        viewModel.createOrder(currentUser?.id ?: "", "DOWNLOADED", parsedItems!!)
+                                        PdfHelper.copyToDownloads(context, pdfUri)
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("Download")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                if (parsedItems != null) {
+                                    val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
+                                    if (pdfUri != null) {
+                                        viewModel.createOrder(currentUser?.id ?: "", "EXTERNAL", parsedItems!!)
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/pdf"
+                                            putExtra(Intent.EXTRA_STREAM, pdfUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Share PDF Order Document"))
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Share")
+                            Spacer(Modifier.width(4.dp))
+                            Text("Share")
+                        }
+                        Button(
+                            onClick = {
+                                showUserSelection = true
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send in App")
+                            Spacer(Modifier.width(4.dp))
+                            Text("Send in App")
+                        }
                     }
                 }
             }
+        }
+        
+        if (showUserSelection) {
+            val recentChatUserIds by viewModel.recentChatUserIds.collectAsStateWithLifecycle(initialValue = emptyList())
+            val usersToShow = remember(allUsers, currentUser, recentChatUserIds) {
+                val others = allUsers.filter { it.id != currentUser?.id }
+                val (recent, rest) = others.partition { recentChatUserIds.contains(it.id) }
+                val sortedRecent = recent.sortedBy { recentChatUserIds.indexOf(it.id) }
+                Pair(sortedRecent, rest)
+            }
+            
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showUserSelection = false },
+                title = { Text("Select User to Send") },
+                text = {
+                    LazyColumn {
+                        val (recentUsers, otherUsers) = usersToShow
+                        if (recentUsers.isEmpty() && otherUsers.isEmpty()) {
+                            item { Text("No other users available.", modifier = Modifier.padding(16.dp)) }
+                        } else {
+                            if (recentUsers.isNotEmpty()) {
+                                item { Text("Recent Chats", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
+                                items(recentUsers) { user ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                            showUserSelection = false
+                                            if (parsedItems != null) {
+                                                viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                            }
+                                            val formattedOrder = parsedItems?.joinToString("\n") { "- ${it.first}: ${it.second}" } ?: ""
+                                            val messageText = "Here is an order list:\n$formattedOrder"
+                                            viewModel.sendMessage(user.id, messageText)
+                                            onNavigateToChat(user.id)
+                                        },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Text(user.name ?: "", fontWeight = FontWeight.Bold)
+                                            if (!user.shopName.isNullOrBlank()) {
+                                                Text(user.shopName ?: "", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    }
+                                }
+                                item { Spacer(modifier = Modifier.height(16.dp)) }
+                            }
+                            
+                            if (otherUsers.isNotEmpty()) {
+                                item { Text("Other Contacts", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
+                                items(otherUsers) { user ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                            showUserSelection = false
+                                            if (parsedItems != null) {
+                                                viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                            }
+                                            val formattedOrder = parsedItems?.joinToString("\n") { "- ${it.first}: ${it.second}" } ?: ""
+                                            val messageText = "Here is an order list:\n$formattedOrder"
+                                            viewModel.sendMessage(user.id, messageText)
+                                            onNavigateToChat(user.id)
+                                        },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Text(user.name ?: "", fontWeight = FontWeight.Bold)
+                                            if (!user.shopName.isNullOrBlank()) {
+                                                Text(user.shopName ?: "", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { showUserSelection = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

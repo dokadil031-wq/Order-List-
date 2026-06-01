@@ -7,7 +7,8 @@ data class User(
     val email: String = "",
     val password: String = "",
     val type: String = "USER",
-    val shopName: String = ""
+    val shopName: String = "",
+    val blockedUserIds: List<String> = emptyList()
 )
 
 data class Order(
@@ -32,7 +33,11 @@ data class Message(
     val senderId: String = "",
     val receiverId: String = "",
     val content: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isDeletedForEveryone: Boolean = false,
+    val deletedForUserIds: List<String> = emptyList(),
+    val isEdited: Boolean = false,
+    val isRead: Boolean = false
 )
 
 data class OrderWithDetails(
