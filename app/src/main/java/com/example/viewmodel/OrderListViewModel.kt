@@ -5,11 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
-import com.example.api.Content
-import com.example.api.GenerateContentRequest
-import com.example.api.GenerationConfig
-import com.example.api.Part
-import com.example.api.RetrofitClient
 import com.example.data.Message
 import com.example.data.Order
 import com.example.data.OrderItem
@@ -22,13 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 class OrderListViewModel(private val repository: AppRepository, private val prefs: SharedPreferences) : ViewModel() {
 
@@ -174,41 +162,37 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         viewModelScope.launch {
             _isParsing.value = true
             try {
-                val apiKey = BuildConfig.GEMINI_API_KEY
+                // Parse order locally with intelligent regex that handles multiple separators
+                // Split by newlines, commas, "and", "and then", bullet points, etc.
+                val delimiters = arrayOf("\n", ",", " and then ", " and ", " And ", " & ")
+                var textToProcess = naturalLanguageText
                 
-                val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true; allowSpecialFloatingPointValues = true }
+                // Replace bullets or dashes with newlines
+                textToProcess = textToProcess.replace(Regex("""^[-\*•]\s*""", RegexOption.MULTILINE), "\n")
                 
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = "Extract EVERY SINGLE order item and its exact quantity from this text. Do not summarize. List all items. Format as a JSON array of objects with keys 'name' and 'quantity'. Text: $naturalLanguageText")))),
-                    generationConfig = GenerationConfig(
-                        temperature = 0.0f,
-                        maxOutputTokens = 8192,
-                        responseMimeType = "application/json"
-                    )
-                )
-
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val responseText = response.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
-                val cleanText = responseText.replace("```json", "").replace("```", "").trim()
-                
-                val startIndex = cleanText.indexOf('[')
-                val endIndex = cleanText.lastIndexOf(']')
-                val arrayString = if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
-                    cleanText.substring(startIndex, endIndex + 1)
-                } else if (cleanText.isEmpty()) {
-                    "[]"
-                } else {
-                    cleanText
+                // Split the text into parts using multiple delimiters
+                for (delimiter in delimiters) {
+                    textToProcess = textToProcess.replace(delimiter, "|||")
                 }
                 
-                val jsonArray = jsonParser.parseToJsonElement(arrayString).jsonArray
-                val items = jsonArray.map { element ->
-                    val obj = element.jsonObject
-                    Pair(
-                        obj["name"]?.jsonPrimitive?.content ?: "",
-                        obj["quantity"]?.jsonPrimitive?.content ?: ""
-                    )
-                }.filter { it.first.isNotEmpty() }
+                val items = textToProcess.split("|||")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals("i want", ignoreCase = true) && !it.equals("give me", ignoreCase = true) && !it.equals("please", ignoreCase = true) }
+                    .map { itemStr ->
+                        // Attempt to extract quantity and name handling scenarios like "5 items of X" or "X 5 items"
+                        // Regex looks for a number (optionally with units) either at start or end of string
+                        val startQtyMatch = Regex("""^(\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml|pcs|pack|packs|boxes|box|pieces|piece)?)\s+(?:of\s+)?(.+)$""", RegexOption.IGNORE_CASE).find(itemStr)
+                        val endQtyMatch = Regex("""^(.+?)(?:\s+of)?\s+(\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml|pcs|pack|packs|boxes|box|pieces|piece)?)$""", RegexOption.IGNORE_CASE).find(itemStr)
+                        
+                        if (startQtyMatch != null) {
+                            Pair(startQtyMatch.groupValues[2].trim(), startQtyMatch.groupValues[1].trim())
+                        } else if (endQtyMatch != null) {
+                            Pair(endQtyMatch.groupValues[1].trim(), endQtyMatch.groupValues[2].trim())
+                        } else {
+                            // If no quantity detected, we assume 1
+                            Pair(itemStr, "1")
+                        }
+                    }
 
                 if (items.isNotEmpty()) {
                     onSuccess(items)
@@ -216,7 +200,7 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onError("Could not extract any items.")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Unknown error")
+                onError("Error parsing order: ${e.message}")
             } finally {
                 _isParsing.value = false
             }

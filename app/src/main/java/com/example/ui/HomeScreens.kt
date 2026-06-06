@@ -228,7 +228,11 @@ fun LoginScreen(
                             errorMessage = ""
                             if (isCreateAccount) {
                                 if (name.isNotBlank() && email.isNotBlank() && phone.isNotBlank() && password.isNotBlank() && confirmPassword.isNotBlank()) {
-                                    if (password != confirmPassword) {
+                                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                        errorMessage = "Invalid email format"
+                                    } else if (!android.util.Patterns.PHONE.matcher(phone).matches() || phone.length < 10) {
+                                        errorMessage = "Invalid mobile number"
+                                    } else if (password != confirmPassword) {
                                         errorMessage = "Passwords do not match"
                                     } else {
                                         isLoading = true

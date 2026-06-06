@@ -15,22 +15,27 @@ import kotlinx.coroutines.flow.combine
 import java.util.UUID
 
 class AppRepository() {
-    private val db: DatabaseReference? by lazy {
+    private val dbRef: DatabaseReference? by lazy {
+        var dr: DatabaseReference? = null
         try {
-            FirebaseDatabase.getInstance().reference
+            dr = FirebaseDatabase.getInstance().reference.child("order_list_app")
         } catch (e: Exception) {
             try {
-                FirebaseDatabase.getInstance("https://order-list-81886-default-rtdb.asia-southeast1.firebasedatabase.app").reference
+                dr = FirebaseDatabase.getInstance("https://order-list-81886-default-rtdb.asia-southeast1.firebasedatabase.app").reference.child("order_list_app")
             } catch (e2: Exception) {
                 try {
-                    FirebaseDatabase.getInstance("https://order-list-81886-default-rtdb.firebaseio.com").reference
+                    dr = FirebaseDatabase.getInstance("https://order-list-81886-default-rtdb.firebaseio.com").reference.child("order_list_app")
                 } catch (e3: Exception) {
                     android.util.Log.e("AppRepository", "Failed to initialize Firebase db: ${e3.message}")
-                    null
                 }
             }
         }
+        dr?.keepSynced(true)
+        dr
     }
+    
+    // We will use dbRef where db was used
+    private val db: DatabaseReference? get() = dbRef
 
     fun getAllUsers(): Flow<List<User>> = db?.child("users")?.asFlow()?.map { snapshot ->
         snapshot?.children?.mapNotNull { it.getValue(User::class.java) } ?: emptyList()
@@ -60,27 +65,17 @@ class AppRepository() {
 
     suspend fun getUserByEmail(email: String): User? {
         return try {
-            val snapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
-                db?.child("users")?.orderByChild("email")?.equalTo(email)?.get()?.await()
-            }
-            var user = snapshot?.children?.firstOrNull()?.getValue(User::class.java)
-            if (user == null) {
-                // Fallback for case sensitivity issue: try lowercase
-                val lowerSnapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
-                    db?.child("users")?.orderByChild("email")?.equalTo(email.lowercase())?.get()?.await()
+            var user: User? = null
+            try {
+                val snapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
+                    db?.child("users")?.orderByChild("email")?.equalTo(email)?.get()?.await()
                 }
-                user = lowerSnapshot?.children?.firstOrNull()?.getValue(User::class.java)
+                user = snapshot?.children?.firstOrNull()?.getValue(User::class.java)
+            } catch (e: Exception) {
+                android.util.Log.e("AppRepository", "Email index query failed: ${e.message}")
             }
             if (user == null) {
-                // Fallback for capitalized first letter
-                val capitalizedSnapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
-                    val capEmail = email.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
-                    db?.child("users")?.orderByChild("email")?.equalTo(capEmail)?.get()?.await()
-                }
-                user = capitalizedSnapshot?.children?.firstOrNull()?.getValue(User::class.java)
-            }
-            if (user == null) {
-                // Fallback to fetching all and filtering manually (in case index is missing)
+                // Fallback to fetching all and filtering manually
                 val allUsersSnapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
                     db?.child("users")?.get()?.await()
                 }
@@ -95,12 +90,17 @@ class AppRepository() {
 
     suspend fun getUserByPhone(phone: String): User? {
         return try {
-            val snapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
-                db?.child("users")?.orderByChild("phoneNumber")?.equalTo(phone)?.get()?.await()
+            var user: User? = null
+            try {
+                val snapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
+                    db?.child("users")?.orderByChild("phoneNumber")?.equalTo(phone)?.get()?.await()
+                }
+                user = snapshot?.children?.firstOrNull()?.getValue(User::class.java)
+            } catch (e: Exception) {
+                android.util.Log.e("AppRepository", "Phone index query failed: ${e.message}")
             }
-            var user = snapshot?.children?.firstOrNull()?.getValue(User::class.java)
             if (user == null) {
-                // Fallback to fetching all and filtering manually (in case index is missing)
+                // Fallback to fetching all and filtering manually
                 val allUsersSnapshot = kotlinx.coroutines.withTimeoutOrNull(12000) {
                     db?.child("users")?.get()?.await()
                 }

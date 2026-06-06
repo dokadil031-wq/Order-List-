@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,6 +48,17 @@ fun GenerateOrderScreen(
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
     var showUserSelection by remember { mutableStateOf(false) }
+    var orderCommitted by remember { mutableStateOf(false) }
+
+    BackHandler {
+        if (!orderCommitted) {
+            if (parsedItems != null) {
+                viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
+            }
+            orderCommitted = true
+        }
+        onNavigateBack()
+    }
 
     Scaffold(
         topBar = {
@@ -56,7 +68,16 @@ fun GenerateOrderScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        focusManager.clearFocus()
+                        if (!orderCommitted) {
+                            if (parsedItems != null) {
+                                viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
+                            }
+                            orderCommitted = true
+                        }
+                        onNavigateBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -70,6 +91,12 @@ fun GenerateOrderScreen(
                 .padding(padding)
                 .padding(16.dp)
                 .imePadding()
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) {
+                    focusManager.clearFocus()
+                }
         ) {
             if (parsedItems == null) {
                 Text("Describe your order:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -79,11 +106,12 @@ fun GenerateOrderScreen(
                     value = orderText,
                     onValueChange = { orderText = it },
                     label = { Text("Type order (e.g. 10kg sugar, 2 boxes of soap)") },
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 300.dp),
                     shape = MaterialTheme.shapes.medium,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                    maxLines = 10
+                    minLines = 5,
+                    maxLines = 15
                 )
 
                 val safeError = error
@@ -144,10 +172,13 @@ fun GenerateOrderScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = { 
-                                if (parsedItems != null) {
-                                    viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
+                                if (!orderCommitted) {
+                                    if (parsedItems != null) {
+                                        viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
+                                    }
+                                    orderCommitted = true
                                 }
-                                parsedItems = null 
+                                onNavigateBack() 
                             },
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = MaterialTheme.shapes.medium
@@ -159,7 +190,10 @@ fun GenerateOrderScreen(
                                 if (parsedItems != null) {
                                     val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
                                     if (pdfUri != null) {
-                                        viewModel.createOrder(currentUser?.id ?: "", "DOWNLOADED", parsedItems!!)
+                                        if (!orderCommitted) {
+                                            viewModel.createOrder(currentUser?.id ?: "", "DOWNLOADED", parsedItems!!)
+                                            orderCommitted = true
+                                        }
                                         PdfHelper.copyToDownloads(context, pdfUri)
                                     } else {
                                         android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
@@ -180,13 +214,26 @@ fun GenerateOrderScreen(
                                 if (parsedItems != null) {
                                     val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
                                     if (pdfUri != null) {
-                                        viewModel.createOrder(currentUser?.id ?: "", "EXTERNAL", parsedItems!!)
+                                        if (!orderCommitted) {
+                                            viewModel.createOrder(currentUser?.id ?: "", "EXTERNAL", parsedItems!!)
+                                            orderCommitted = true
+                                        }
                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "application/pdf"
                                             putExtra(Intent.EXTRA_STREAM, pdfUri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            setPackage("com.whatsapp")
                                         }
-                                        context.startActivity(Intent.createChooser(intent, "Share PDF Order Document"))
+                                        try {
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            val fallback = Intent(Intent.ACTION_SEND).apply {
+                                                type = "application/pdf"
+                                                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(Intent.createChooser(fallback, "Share PDF Order Document"))
+                                        }
                                     } else {
                                         android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -240,6 +287,7 @@ fun GenerateOrderScreen(
                                     Card(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                                             showUserSelection = false
+                                            orderCommitted = true
                                             if (parsedItems != null) {
                                                 viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
                                             }
@@ -267,6 +315,7 @@ fun GenerateOrderScreen(
                                     Card(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                                             showUserSelection = false
+                                            orderCommitted = true
                                             if (parsedItems != null) {
                                                 viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
                                             }
