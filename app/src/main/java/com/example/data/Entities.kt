@@ -8,6 +8,7 @@ data class User(
     val password: String = "",
     val type: String = "USER",
     val shopName: String = "",
+    val profileImage: String = "",
     val blockedUserIds: List<String> = emptyList()
 )
 

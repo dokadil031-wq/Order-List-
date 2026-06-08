@@ -20,8 +20,19 @@ fun AppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = "login"
+        startDestination = "splash"
     ) {
+        composable("splash") {
+            SplashScreen(
+                viewModel = viewModel,
+                onNavigateToHome = {
+                    navController.navigate("home") { popUpTo("splash") { inclusive = true } }
+                },
+                onNavigateToLogin = {
+                    navController.navigate("login") { popUpTo("splash") { inclusive = true } }
+                }
+            )
+        }
         composable("login") {
             LoginScreen(
                 viewModel = viewModel,
@@ -38,6 +49,7 @@ fun AppNavigation(
                 onNavigateToOrderDetails = { orderId -> navController.navigate("order_details/$orderId") },
                 onNavigateToChat = { userId -> navController.navigate("chat/$userId") },
                 onLogout = { 
+                    com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
                     viewModel.setCurrentUser(null)
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 }

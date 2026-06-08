@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class OrderListViewModel(private val repository: AppRepository, private val prefs: SharedPreferences) : ViewModel() {
 
@@ -72,8 +73,13 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
     fun createUser(name: String, email: String = "", phone: String = "", pass: String = "", shopName: String = "", onResult: (Boolean, String) -> Unit) {
         val emailTrimmed = email.trim()
         val phoneTrimmed = phone.trim()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        
         viewModelScope.launch {
             try {
+                if (auth.currentUser == null) {
+                    try { auth.signInAnonymously().await() } catch (e: Exception) {}
+                }
                 if (repository.getUserByPhone(phoneTrimmed) != null) {
                     onResult(false, "App mein account is mobile number ke saath already hai.")
                     return@launch
@@ -82,9 +88,19 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onResult(false, "App mein is email se account already hai.")
                     return@launch
                 }
-                val user = repository.insertUser(name, emailTrimmed, phoneTrimmed, pass, shopName)
-                setCurrentUser(user)
-                onResult(true, "")
+                
+                try {
+                    val authResult = auth.createUserWithEmailAndPassword(emailTrimmed, pass).await()
+                    val userId = authResult.user?.uid ?: java.util.UUID.randomUUID().toString()
+                    val user = repository.insertUserWithId(userId, name, emailTrimmed, phoneTrimmed, pass, shopName)
+                    setCurrentUser(user)
+                    onResult(true, "")
+                } catch (e: Exception) {
+                    android.util.Log.e("FirebaseAuth", "Auth failed: ${e.message}")
+                    val user = repository.insertUser(name, emailTrimmed, phoneTrimmed, pass, shopName)
+                    setCurrentUser(user)
+                    onResult(true, "")
+                }
             } catch (e: Exception) {
                 onResult(false, e.message ?: "Unknown error")
             }
@@ -93,46 +109,98 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
     
     fun loginUser(phoneOrEmail: String, pass: String, onResult: (Boolean, String) -> Unit) {
         val identifier = phoneOrEmail.trim()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        
         viewModelScope.launch {
-            val user = if (identifier.contains("@")) {
-                repository.getUserByEmail(identifier)
-            } else {
-                repository.getUserByPhone(identifier)
-            }
-            
-            if (user == null) {
-                onResult(false, "User not found")
-            } else if (user.password != pass) {
-                onResult(false, "Incorrect password")
-            } else {
-                setCurrentUser(user)
-                onResult(true, "")
+            try {
+                if (auth.currentUser == null) {
+                    try { auth.signInAnonymously().await() } catch (e: Exception) {}
+                }
+                val user = if (identifier.contains("@")) {
+                    repository.getUserByEmail(identifier)
+                } else {
+                    repository.getUserByPhone(identifier)
+                }
+                
+                if (user == null) {
+                    onResult(false, "User not found")
+                } else if (user.password != pass) {
+                    onResult(false, "Incorrect password")
+                } else {
+                    try {
+                        auth.signInWithEmailAndPassword(user.email, pass).await()
+                    } catch (e: Exception) {
+                        try {
+                            auth.createUserWithEmailAndPassword(user.email, pass).await()
+                        } catch (e2: Exception) {
+                            android.util.Log.e("FirebaseAuth", "Migration failed: ${e2.message}")
+                        }
+                    }
+                    setCurrentUser(user)
+                    onResult(true, "")
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Authentication error")
             }
         }
     }
 
     fun resetPassword(phoneOrEmail: String, newPass: String, onResult: (Boolean, String) -> Unit) {
         val identifier = phoneOrEmail.trim()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         viewModelScope.launch {
-            val user = if (identifier.contains("@")) {
-                repository.getUserByEmail(identifier)
-            } else {
-                repository.getUserByPhone(identifier)
-            }
-            
-            if (user == null) {
-                onResult(false, "User not found")
-            } else {
-                try {
-                    val success = repository.updatePassword(user.id, newPass)
-                    if (success) {
-                        onResult(true, "Password updated successfully")
-                    } else {
-                        onResult(false, "Failed to update password")
-                    }
-                } catch (e: Exception) {
-                    onResult(false, e.message ?: "Failed to update password")
+            try {
+                if (auth.currentUser == null) {
+                    try { auth.signInAnonymously().await() } catch (e: Exception) {}
                 }
+                val user = if (identifier.contains("@")) {
+                    repository.getUserByEmail(identifier)
+                } else {
+                    repository.getUserByPhone(identifier)
+                }
+                
+                if (user == null) {
+                    onResult(false, "User not found")
+                } else {
+                    try {
+                        val success = repository.updatePassword(user.id, newPass)
+                        if (success) {
+                            try {
+                                auth.signInWithEmailAndPassword(user.email, user.password).await()
+                                auth.currentUser?.updatePassword(newPass)?.let { it.await() }
+                            } catch (e: Exception) {}
+                            onResult(true, "Password updated successfully")
+                        } else {
+                            onResult(false, "Failed to update password")
+                        }
+                    } catch (e: Exception) {
+                        onResult(false, e.message ?: "Failed to update password")
+                    }
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Error updating password")
+            }
+        }
+    }
+
+    fun updateUserProfile(name: String, shopName: String, profileImageBase64: String?, onResult: (Boolean, String) -> Unit) {
+        val user = _currentUser.value
+        if (user == null) {
+            onResult(false, "User not authenticated")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.updateUserProfile(user.id, name.trim(), shopName.trim(), profileImageBase64)
+                val updatedUser = user.copy(
+                    name = name.trim(),
+                    shopName = shopName.trim(),
+                    profileImage = profileImageBase64 ?: user.profileImage
+                )
+                setCurrentUser(updatedUser)
+                onResult(true, "Profile updated successfully")
+            } catch (e: Exception) {
+                onResult(false, "Failed to update profile: ${e.message}")
             }
         }
     }

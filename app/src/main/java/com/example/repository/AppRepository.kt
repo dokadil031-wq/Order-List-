@@ -49,6 +49,19 @@ class AppRepository() {
         snapshot?.children?.mapNotNull { it.getValue(User::class.java) } ?: emptyList()
     } ?: kotlinx.coroutines.flow.flowOf(emptyList())
 
+    suspend fun insertUserWithId(authId: String, name: String, email: String = "", phone: String = "", pass: String = "", shopName: String = ""): User {
+        val type = if (shopName.isNotBlank()) "SELLER" else "BUYER"
+        val user = User(id = authId, name = name, email = email, phoneNumber = phone, password = pass, type = type, shopName = shopName)
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(8000) {
+                db?.child("users")?.child(authId)?.setValue(user)?.await()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AppRepository", "Error creating user: ${e.message}")
+        }
+        return user
+    }
+
     suspend fun insertUser(name: String, email: String = "", phone: String = "", pass: String = "", shopName: String = ""): User {
         val id = db?.child("users")?.push()?.key ?: java.util.UUID.randomUUID().toString()
         val type = if (shopName.isNotBlank()) "SELLER" else "BUYER"
@@ -123,6 +136,16 @@ class AppRepository() {
             android.util.Log.e("AppRepository", "Error getting user by id: ${e.message}")
             null
         }
+    }
+
+    suspend fun updateUserProfile(userId: String, name: String, shopName: String, profileImage: String?) {
+        val updateData = mutableMapOf<String, Any>()
+        updateData["name"] = name
+        updateData["shopName"] = shopName
+        if (profileImage != null) {
+            updateData["profileImage"] = profileImage
+        }
+        db?.child("users")?.child(userId)?.updateChildren(updateData)?.await()
     }
 
     suspend fun createOrder(buyerId: String, sellerId: String, items: List<Pair<String, String>>) {

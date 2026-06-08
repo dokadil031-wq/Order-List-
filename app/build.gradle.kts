@@ -98,6 +98,7 @@ dependencies {
   // implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   implementation(libs.firebase.database)
+  implementation(libs.firebase.auth)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
