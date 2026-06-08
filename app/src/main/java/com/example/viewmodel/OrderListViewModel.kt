@@ -181,8 +181,9 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     .map { itemStr ->
                         // Attempt to extract quantity and name handling scenarios like "5 items of X" or "X 5 items"
                         // Regex looks for a number (optionally with units) either at start or end of string
-                        val startQtyMatch = Regex("""^(\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml|pcs|pack|packs|boxes|box|pieces|piece)?)\s+(?:of\s+)?(.+)$""", RegexOption.IGNORE_CASE).find(itemStr)
-                        val endQtyMatch = Regex("""^(.+?)(?:\s+of)?\s+(\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml|pcs|pack|packs|boxes|box|pieces|piece)?)$""", RegexOption.IGNORE_CASE).find(itemStr)
+                        val units = "kg|g|gm|mg|l|lt|ltr|litre|litres|liter|liters|ml|pcs|pack|packet|packets|packs|boxes|box|pieces|piece|cm|meter|meters|m|inch|inches"
+                        val startQtyMatch = Regex("""^(\d+(?:\.\d+)?\s*(?:$units)?)\s+(?:of\s+)?(.+)$""", RegexOption.IGNORE_CASE).find(itemStr)
+                        val endQtyMatch = Regex("""^(.+?)(?:\s+of)?\s+((?:x|qty|quantity)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:$units))$""", RegexOption.IGNORE_CASE).find(itemStr)
                         
                         if (startQtyMatch != null) {
                             Pair(startQtyMatch.groupValues[2].trim(), startQtyMatch.groupValues[1].trim())

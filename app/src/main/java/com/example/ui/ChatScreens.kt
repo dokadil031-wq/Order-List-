@@ -52,10 +52,10 @@ fun MessagesContent(
     val focusManager = LocalFocusManager.current
 
     val usersToShow = remember(allUsers, searchQuery, currentUser, recentChatUserIds, selectedFilter, unreadChatUserIds) {
-        val users = allUsers.filter { it.id != currentUser?.id }
+        val users = allUsers.filter { it.id != currentUser?.id && recentChatUserIds.contains(it.id) }
         
         val sourceUsers = if (selectedFilter == "Unread") {
-            users.filter { unreadChatUserIds.contains(it.id) && recentChatUserIds.contains(it.id) }
+            users.filter { unreadChatUserIds.contains(it.id) }
         } else {
             users
         }
@@ -65,9 +65,7 @@ fun MessagesContent(
             (it.name ?: "").contains(searchQuery, ignoreCase = true) || (it.shopName ?: "").contains(searchQuery, ignoreCase = true) 
         }
         
-        val (recent, rest) = filtered.partition { recentChatUserIds.contains(it.id) }
-        val sortedRecent = recent.sortedBy { recentChatUserIds.indexOf(it.id) }
-        Pair(sortedRecent, rest)
+        filtered.sortedBy { recentChatUserIds.indexOf(it.id) }
     }
 
     Column(
@@ -102,7 +100,7 @@ fun MessagesContent(
         }
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val (recentUsers, otherUsers) = usersToShow
+            val recentUsers = usersToShow
             if (recentUsers.isNotEmpty()) {
                 item { Text(if (selectedFilter == "Unread") "Unread Chats" else "Recent Chats", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
                 items(recentUsers) { seller ->
@@ -185,49 +183,17 @@ fun MessagesContent(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
-            }
-            
-            if (otherUsers.isNotEmpty() && selectedFilter == "All") {
-                item { Text("Other Users", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
-                items(otherUsers) { seller ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToChat(seller.id ?: "") },
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.AccountCircle,
-                                    contentDescription = "Profile Picture",
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column {
-                                    val safeShop = seller.shopName ?: ""
-                                    Text(
-                                        text = if (safeShop.isNotBlank()) safeShop else (seller.name ?: ""),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Normal
-                                    )
-                                    if (safeShop.isNotBlank() && seller.name != safeShop) {
-                                        Text(seller.name ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                                    }
-                                }
-                            }
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Open Chat", modifier = Modifier.size(16.dp).rotate(180f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+            } else if (searchQuery.isNotBlank()) {
+                 item {
+                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                         Text("No conversations found matching your search. To chat with someone new, go to the Dashboard and tap the Search icon.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                     }
+                 }
+            } else {
+                item {
+                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                         Text("You haven't started any chats yet. To chat with someone new, go to the Dashboard and tap the Search icon.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                     }
                 }
             }
         }

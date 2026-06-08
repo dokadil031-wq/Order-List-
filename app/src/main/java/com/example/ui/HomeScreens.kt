@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +52,7 @@ import androidx.compose.material3.ScrollableTabRow
 
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +79,32 @@ fun LoginScreen(
     var fpNewPassword by remember { mutableStateOf("") }
     var fpMessage by remember { mutableStateOf("") }
     var fpIsError by remember { mutableStateOf(false) }
+
+    var isOtpVerification by remember { mutableStateOf(false) }
+    var generatedOtp by remember { mutableStateOf("") }
+    var enteredOtp by remember { mutableStateOf("") }
+    var simulateSameDevice by remember { mutableStateOf(true) }
+    var userPhoneForOtp by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    LaunchedEffect(isOtpVerification) {
+        if (isOtpVerification) {
+            generatedOtp = (100000..999999).random().toString()
+            android.widget.Toast.makeText(context, "OTP Sent to: $userPhoneForOtp\nOTP: $generatedOtp", android.widget.Toast.LENGTH_LONG).show()
+            if (simulateSameDevice) {
+                kotlinx.coroutines.delay(2000)
+                enteredOtp = generatedOtp
+                android.widget.Toast.makeText(context, "OTP Auto-Captured ✅", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    var emailDropdownExpanded by remember { mutableStateOf(false) }
+    var phoneDropdownExpanded by remember { mutableStateOf(false) }
+    var loginDropdownExpanded by remember { mutableStateOf(false) }
+    val simulatedDeviceEmails = listOf("dokadil031@gmail.com", "user@example.com")
+    val simulatedDevicePhones = listOf("9876543210", "9123456780")
+    val simulatedDeviceAll = simulatedDeviceEmails + simulatedDevicePhones
     
     val focusManager = LocalFocusManager.current
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
@@ -114,179 +142,292 @@ fun LoginScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Text(if (isCreateAccount) "Sign Up" else "Welcome Back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    if (isCreateAccount) {
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text("Name") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, autoCorrectEnabled = false)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        OutlinedTextField(
-                            value = shopName,
-                            onValueChange = { shopName = it },
-                            label = { Text("Shop Name (Optional for Buyers)") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, autoCorrectEnabled = false)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text("Email Address") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        OutlinedTextField(
-                            value = phone,
-                            onValueChange = { phone = it },
-                            label = { Text("Mobile Number") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, autoCorrectEnabled = false)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    } else {
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text("Email Address or Mobile Number") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                    
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password") },
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                        trailingIcon = {
-                            val image = if (passwordVisible)
-                                Icons.Filled.Visibility
-                            else Icons.Filled.VisibilityOff
-                            val description = if (passwordVisible) "Hide password" else "Show password"
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(imageVector = image, contentDescription = description)
-                            }
-                        }
-                    )
-                    
-                    if (isCreateAccount) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = confirmPassword,
-                            onValueChange = { confirmPassword = it },
-                            label = { Text("Confirm Password") },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                            trailingIcon = {
-                                val image = if (confirmPasswordVisible)
-                                    Icons.Filled.Visibility
-                                else Icons.Filled.VisibilityOff
-                                val description = if (confirmPasswordVisible) "Hide password" else "Show password"
-                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                                    Icon(imageVector = image, contentDescription = description)
-                                }
-                            }
-                        )
-                    }
-                    
-                    if (errorMessage.isNotEmpty()) {
+                    if (isOtpVerification) {
+                        Text("OTP Verification", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            errorMessage = ""
-                            if (isCreateAccount) {
-                                if (name.isNotBlank() && email.isNotBlank() && phone.isNotBlank() && password.isNotBlank() && confirmPassword.isNotBlank()) {
-                                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                                        errorMessage = "Invalid email format"
-                                    } else if (!android.util.Patterns.PHONE.matcher(phone).matches() || phone.length < 10) {
-                                        errorMessage = "Invalid mobile number"
-                                    } else if (password != confirmPassword) {
-                                        errorMessage = "Passwords do not match"
-                                    } else {
-                                        isLoading = true
-                                        viewModel.createUser(name = name, email = email, phone = phone, pass = password, shopName = shopName) { success, msg ->
-                                            isLoading = false
-                                            if (!success) {
-                                                errorMessage = msg
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    errorMessage = "Please fill all required fields (Shop Name is optional for buyers)"
+                        Text("We've sent a 6-digit OTP to your mobile.", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        OutlinedTextField(
+                            value = enteredOtp,
+                            onValueChange = { enteredOtp = it },
+                            label = { Text("Enter OTP") },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            trailingIcon = {
+                                if (enteredOtp == generatedOtp && enteredOtp.isNotEmpty()) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = "Verified", tint = androidx.compose.ui.graphics.Color.Green)
                                 }
-                            } else {
-                                if (email.isNotBlank() && password.isNotBlank()) {
-                                    isLoading = true
-                                    viewModel.loginUser(email, password) { success, msg ->
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(checked = simulateSameDevice, onCheckedChange = { simulateSameDevice = it })
+                            Text("Simulate SIM in this device (Auto-capture)", style = MaterialTheme.typography.bodySmall)
+                        }
+                        
+                        if (errorMessage.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = {
+                                if (enteredOtp != generatedOtp) {
+                                    errorMessage = "Invalid OTP"
+                                    return@Button
+                                }
+                                errorMessage = ""
+                                isLoading = true
+                                if (isCreateAccount) {
+                                    viewModel.createUser(name = name, email = email, phone = phone, pass = password, shopName = shopName) { success, msg ->
                                         isLoading = false
                                         if (!success) {
                                             errorMessage = msg
                                         }
                                     }
                                 } else {
-                                    errorMessage = "Please enter email/mobile and password"
+                                    viewModel.loginUser(email, password) { success, msg ->
+                                        isLoading = false
+                                        if (!success) {
+                                            errorMessage = msg
+                                        }
+                                    }
+                                }
+                            },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            enabled = !isLoading
+                        ) {
+                            if (isLoading) {
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Text("Verify & Continue")
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TextButton(onClick = { isOtpVerification = false; enteredOtp = "" }) {
+                            Text("Back")
+                        }
+                    } else {
+                        Text(if (isCreateAccount) "Sign Up" else "Welcome Back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (isCreateAccount) {
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { name = it },
+                                label = { Text("Name") },
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, autoCorrectEnabled = false)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            OutlinedTextField(
+                                value = shopName,
+                                onValueChange = { shopName = it },
+                                label = { Text("Shop Name (Optional for Buyers)") },
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, autoCorrectEnabled = false)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Box {
+                                OutlinedTextField(
+                                    value = email,
+                                    onValueChange = { email = it; emailDropdownExpanded = true },
+                                    label = { Text("Email Address") },
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) emailDropdownExpanded = true },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false)
+                                )
+                                DropdownMenu(
+                                    expanded = emailDropdownExpanded,
+                                    onDismissRequest = { emailDropdownExpanded = false }
+                                ) {
+                                    simulatedDeviceEmails.forEach { simulatedEmail ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text(simulatedEmail) },
+                                            onClick = {
+                                                email = simulatedEmail
+                                                emailDropdownExpanded = false
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = null) }
+                                        )
+                                    }
                                 }
                             }
-                        },
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Box {
+                                OutlinedTextField(
+                                    value = phone,
+                                    onValueChange = { phone = it; phoneDropdownExpanded = true },
+                                    label = { Text("Mobile Number") },
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) phoneDropdownExpanded = true },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, autoCorrectEnabled = false)
+                                )
+                                DropdownMenu(
+                                    expanded = phoneDropdownExpanded,
+                                    onDismissRequest = { phoneDropdownExpanded = false }
+                                ) {
+                                    simulatedDevicePhones.forEach { simulatedPhone ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text(simulatedPhone) },
+                                            onClick = {
+                                                phone = simulatedPhone
+                                                phoneDropdownExpanded = false
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = null) }
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
                         } else {
+                            Box {
+                                OutlinedTextField(
+                                    value = email,
+                                    onValueChange = { email = it; loginDropdownExpanded = true },
+                                    label = { Text("Email Address or Mobile Number") },
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) loginDropdownExpanded = true },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false)
+                                )
+                                DropdownMenu(
+                                    expanded = loginDropdownExpanded,
+                                    onDismissRequest = { loginDropdownExpanded = false }
+                                ) {
+                                    simulatedDeviceAll.forEach { simulatedAcc ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text(simulatedAcc) },
+                                            onClick = {
+                                                email = simulatedAcc
+                                                loginDropdownExpanded = false
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = null) }
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                        
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Password") },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                            trailingIcon = {
+                                val image = if (passwordVisible)
+                                    Icons.Filled.Visibility
+                                else Icons.Filled.VisibilityOff
+                                val description = if (passwordVisible) "Hide password" else "Show password"
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(imageVector = image, contentDescription = description)
+                                }
+                            }
+                        )
+                        
+                        if (isCreateAccount) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = confirmPassword,
+                                onValueChange = { confirmPassword = it },
+                                label = { Text("Confirm Password") },
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                                trailingIcon = {
+                                    val image = if (confirmPasswordVisible)
+                                        Icons.Filled.Visibility
+                                    else Icons.Filled.VisibilityOff
+                                    val description = if (confirmPasswordVisible) "Hide password" else "Show password"
+                                    IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                        Icon(imageVector = image, contentDescription = description)
+                                    }
+                                }
+                            )
+                        }
+                        
+                        if (errorMessage.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = {
+                                errorMessage = ""
+                                if (isCreateAccount) {
+                                    if (name.isNotBlank() && email.isNotBlank() && phone.isNotBlank() && password.isNotBlank() && confirmPassword.isNotBlank()) {
+                                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                            errorMessage = "Invalid email format"
+                                        } else if (!android.util.Patterns.PHONE.matcher(phone).matches() || phone.length < 10) {
+                                            errorMessage = "Invalid mobile number"
+                                        } else if (password != confirmPassword) {
+                                            errorMessage = "Passwords do not match"
+                                        } else {
+                                            userPhoneForOtp = phone
+                                            isOtpVerification = true
+                                            enteredOtp = ""
+                                            errorMessage = ""
+                                        }
+                                    } else {
+                                        errorMessage = "Please fill all required fields (Shop Name is optional for buyers)"
+                                    }
+                                } else {
+                                    if (email.isNotBlank() && password.isNotBlank()) {
+                                        userPhoneForOtp = email
+                                        isOtpVerification = true
+                                        enteredOtp = ""
+                                        errorMessage = ""
+                                    } else {
+                                        errorMessage = "Please enter email/mobile and password"
+                                    }
+                                }
+                            },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) {
                             Text(if (isCreateAccount) "Create Account" else "Login")
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    TextButton(onClick = { 
-                        isCreateAccount = !isCreateAccount 
-                        errorMessage = ""
-                    }) {
-                        Text(if (isCreateAccount) "Already have an account? Login" else "Don't have an account? Create one")
-                    }
-
-                    if (!isCreateAccount) {
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
                         TextButton(onClick = { 
-                            isForgotPassword = true 
-                            fpMessage = ""
-                            fpEmailOrPhone = ""
-                            fpNewPassword = ""
+                            isCreateAccount = !isCreateAccount 
+                            errorMessage = ""
                         }) {
-                            Text("Forgot password?")
+                            Text(if (isCreateAccount) "Already have an account? Login" else "Don't have an account? Create one")
+                        }
+    
+                        if (!isCreateAccount) {
+                            TextButton(onClick = { 
+                                isForgotPassword = true 
+                                fpMessage = ""
+                                fpEmailOrPhone = ""
+                                fpNewPassword = ""
+                            }) {
+                                Text("Forgot password?")
+                            }
                         }
                     }
                 }
@@ -519,30 +660,27 @@ fun GlobalSearchContent(
         if (hasPermission) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val contacts = mutableListOf<Pair<String, String>>()
-                val cursor = context.contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
-                    null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-                )
-                cursor?.use {
-                    val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                    val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    while (it.moveToNext()) {
-                        val name = it.getString(nameIndex) ?: ""
-                        val num = it.getString(numberIndex) ?: ""
-                        val sb = StringBuilder()
-                        for (i in 0 until num.length) {
-                            val c = num[i]
-                            if (c.isDigit() || c == '+') {
-                                sb.append(c)
+                try {
+                    val cursor = context.contentResolver.query(
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                        null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+                    )
+                    cursor?.use {
+                        val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        while (it.moveToNext()) {
+                            val name = it.getString(nameIndex) ?: ""
+                            val num = it.getString(numberIndex) ?: ""
+                            val normalized = num.filter { char -> char.isDigit() }
+                            if (normalized.isNotBlank()) {
+                                val last10 = if (normalized.length > 10) normalized.takeLast(10) else normalized
+                                contacts.add(Pair(name, last10))
                             }
                         }
-                        val normalized = sb.toString()
-                        if (normalized.isNotBlank()) {
-                            val last10 = if (normalized.length > 10) normalized.takeLast(10) else normalized
-                            contacts.add(Pair(name, last10))
-                        }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.e("Contacts", "Error reading contacts: ${e.message}")
                 }
                 // Avoid duplicates by number
                 localContacts = contacts.distinctBy { it.second }
@@ -555,12 +693,7 @@ fun GlobalSearchContent(
         val map = mutableMapOf<String, com.example.data.User>()
         for (u in usersWithoutMe) {
             val userPhone = u.phoneNumber ?: ""
-            val sb = StringBuilder()
-            for (i in 0 until userPhone.length) {
-                val c = userPhone[i]
-                if (c.isDigit() || c == '+') sb.append(c)
-            }
-            val normalized = sb.toString()
+            val normalized = userPhone.filter { char -> char.isDigit() }
             if (normalized.isNotBlank()) {
                 val last10 = if (normalized.length > 10) normalized.takeLast(10) else normalized
                 map[last10] = u
@@ -582,38 +715,40 @@ fun GlobalSearchContent(
         }
     }
 
-    val filteredMatchedUsers = remember(matchedUsers, globalQuery) {
+    val allAppUsers = remember(allUsers, currentUser, globalQuery) {
         val query = globalQuery.trim()
-        if (query.isBlank()) matchedUsers else matchedUsers.filter {
-            it.first.contains(query, ignoreCase = true) ||
-            (it.second.name ?: "").contains(query, ignoreCase = true) ||
-            (it.second.shopName ?: "").contains(query, ignoreCase = true) ||
-            (it.second.phoneNumber ?: "").contains(query) ||
-            (it.second.phoneNumber?.replace(Regex("[^0-9+]"), "") ?: "").contains(query)
-        }
-    }
-
-    val filteredUnmatchedContacts = remember(unmatchedContacts, globalQuery) {
-        val query = globalQuery.trim()
-        if (query.isBlank()) unmatchedContacts else unmatchedContacts.filter {
-            it.first.contains(query, ignoreCase = true) || it.second.contains(query, ignoreCase = true)
-        }
-    }
-
-    val filteredOtherAppUsers = remember(allUsers, currentUser, matchedUsers, globalQuery) {
-        val query = globalQuery.trim()
-        val matchedUserIds = matchedUsers.map { it.second.id }.toSet()
-        val otherUsers = allUsers.filter { it.id != currentUser?.id && !matchedUserIds.contains(it.id) }
+        val normalizedQuery = query.filter { it.isDigit() }
+        val otherUsers = allUsers.filter { it.id != currentUser?.id }
         
         if (query.isBlank()) {
-            emptyList()
+            otherUsers // Show all users by default
         } else {
             otherUsers.filter {
+                val normalizedPhone = (it.phoneNumber ?: "").filter { char -> char.isDigit() }
                 (it.name ?: "").contains(query, ignoreCase = true) ||
                 (it.shopName ?: "").contains(query, ignoreCase = true) ||
+                (it.email ?: "").contains(query, ignoreCase = true) ||
                 (it.phoneNumber ?: "").contains(query) ||
-                (it.phoneNumber?.replace(Regex("[^0-9+]"), "") ?: "").contains(query)
+                (normalizedQuery.isNotBlank() && normalizedPhone.contains(normalizedQuery))
             }
+        }
+    }
+
+    val filteredUnmatchedContacts = remember(localContacts, globalQuery, allAppUsers) {
+        val query = globalQuery.trim()
+        val normalizedQuery = query.filter { it.isDigit() }
+        val appUserPhones = allAppUsers.mapNotNull { it.phoneNumber?.filter { c -> c.isDigit() }?.takeLast(10) }.toSet()
+        
+        val unmatched = localContacts.filter { contact ->
+            val contactPhone = contact.second
+            !appUserPhones.contains(contactPhone)
+        }
+        
+        if (query.isBlank()) unmatched else unmatched.filter {
+            val contactPhone = it.second
+            it.first.contains(query, ignoreCase = true) || 
+            it.second.contains(query, ignoreCase = true) ||
+            (normalizedQuery.isNotBlank() && contactPhone.contains(normalizedQuery))
         }
     }
 
@@ -651,43 +786,11 @@ fun GlobalSearchContent(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (filteredMatchedUsers.isNotEmpty()) {
+                if (allAppUsers.isNotEmpty()) {
                     item {
-                        Text("Contacts on App", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                        Text("App Users", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
                     }
-                    items(filteredMatchedUsers) { (contactName, user) ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable { onNavigateToChat(user.id) },
-                            shape = MaterialTheme.shapes.medium,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(contactName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    val safeAppUser = user.name ?: ""
-                                    Text("~ $safeAppUser", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                                    val safePhoneNumber = user.phoneNumber ?: ""
-                                    if (safePhoneNumber.isNotBlank()) {
-                                        Text(safePhoneNumber, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                                    }
-                                }
-                                IconButton(onClick = { onNavigateToChat(user.id ?: "") }) {
-                                    Icon(Icons.AutoMirrored.Filled.Message, contentDescription = "Message", tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if (filteredOtherAppUsers.isNotEmpty()) {
-                    item {
-                        Text("Global App Search", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                    items(filteredOtherAppUsers) { user ->
+                    items(allAppUsers) { user ->
                         Card(
                             modifier = Modifier.fillMaxWidth().clickable { onNavigateToChat(user.id) },
                             shape = MaterialTheme.shapes.medium,
