@@ -48,14 +48,14 @@ fun GenerateOrderScreen(
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
     var showUserSelection by remember { mutableStateOf(false) }
-    var orderCommitted by remember { mutableStateOf(false) }
+    val committedActions = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     BackHandler {
-        if (!orderCommitted) {
+        if (committedActions.isEmpty()) {
             if (parsedItems != null) {
                 viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
             }
-            orderCommitted = true
+            committedActions.add("CANCELLED")
         }
         onNavigateBack()
     }
@@ -70,11 +70,11 @@ fun GenerateOrderScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         focusManager.clearFocus()
-                        if (!orderCommitted) {
+                        if (committedActions.isEmpty()) {
                             if (parsedItems != null) {
                                 viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
                             }
-                            orderCommitted = true
+                            committedActions.add("CANCELLED")
                         }
                         onNavigateBack()
                     }) {
@@ -172,11 +172,11 @@ fun GenerateOrderScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = { 
-                                if (!orderCommitted) {
+                                if (committedActions.isEmpty()) {
                                     if (parsedItems != null) {
                                         viewModel.createOrder(currentUser?.id ?: "", "CANCELLED", parsedItems!!)
                                     }
-                                    orderCommitted = true
+                                    committedActions.add("CANCELLED")
                                 }
                                 onNavigateBack() 
                             },
@@ -190,9 +190,9 @@ fun GenerateOrderScreen(
                                 if (parsedItems != null) {
                                     val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
                                     if (pdfUri != null) {
-                                        if (!orderCommitted) {
+                                        if ("DOWNLOADED" !in committedActions) {
                                             viewModel.createOrder(currentUser?.id ?: "", "DOWNLOADED", parsedItems!!)
-                                            orderCommitted = true
+                                            committedActions.add("DOWNLOADED")
                                         }
                                         PdfHelper.copyToDownloads(context, pdfUri)
                                     } else {
@@ -214,25 +214,19 @@ fun GenerateOrderScreen(
                                 if (parsedItems != null) {
                                     val pdfUri = PdfHelper.generateOrderPdf(context, parsedItems!!, currentUser)
                                     if (pdfUri != null) {
-                                        if (!orderCommitted) {
+                                        if ("EXTERNAL" !in committedActions) {
                                             viewModel.createOrder(currentUser?.id ?: "", "EXTERNAL", parsedItems!!)
-                                            orderCommitted = true
+                                            committedActions.add("EXTERNAL")
                                         }
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                             type = "application/pdf"
                                             putExtra(Intent.EXTRA_STREAM, pdfUri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            setPackage("com.whatsapp")
                                         }
                                         try {
-                                            context.startActivity(intent)
+                                            context.startActivity(Intent.createChooser(shareIntent, "Share PDF Order Document"))
                                         } catch (e: Exception) {
-                                            val fallback = Intent(Intent.ACTION_SEND).apply {
-                                                type = "application/pdf"
-                                                putExtra(Intent.EXTRA_STREAM, pdfUri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(Intent.createChooser(fallback, "Share PDF Order Document"))
+                                            android.widget.Toast.makeText(context, "Error sharing PDF", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
                                         android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
@@ -266,7 +260,7 @@ fun GenerateOrderScreen(
         if (showUserSelection) {
             val recentChatUserIds by viewModel.recentChatUserIds.collectAsStateWithLifecycle(initialValue = emptyList())
             val usersToShow = remember(allUsers, currentUser, recentChatUserIds) {
-                val others = allUsers.filter { it.id != currentUser?.id }
+                val others = allUsers
                 val (recent, rest) = others.partition { recentChatUserIds.contains(it.id) }
                 val sortedRecent = recent.sortedBy { recentChatUserIds.indexOf(it.id) }
                 Pair(sortedRecent, rest)
@@ -287,9 +281,11 @@ fun GenerateOrderScreen(
                                     Card(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                                             showUserSelection = false
-                                            orderCommitted = true
-                                            if (parsedItems != null) {
-                                                viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                            if (user.id !in committedActions) {
+                                                if (parsedItems != null) {
+                                                    viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                                }
+                                                committedActions.add(user.id)
                                             }
                                             val formattedOrder = parsedItems?.joinToString("\n") { "- ${it.first}: ${it.second}" } ?: ""
                                             val messageText = "Here is an order list:\n$formattedOrder"
@@ -299,7 +295,8 @@ fun GenerateOrderScreen(
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                     ) {
                                         Column(modifier = Modifier.padding(16.dp)) {
-                                            Text(user.name ?: "", fontWeight = FontWeight.Bold)
+                                            val displayName = (user.name ?: "") + if (user.id == currentUser?.id) " (You)" else ""
+                                            Text(displayName, fontWeight = FontWeight.Bold)
                                             if (!user.shopName.isNullOrBlank()) {
                                                 Text(user.shopName ?: "", style = MaterialTheme.typography.bodySmall)
                                             }
@@ -315,9 +312,11 @@ fun GenerateOrderScreen(
                                     Card(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                                             showUserSelection = false
-                                            orderCommitted = true
-                                            if (parsedItems != null) {
-                                                viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                            if (user.id !in committedActions) {
+                                                if (parsedItems != null) {
+                                                    viewModel.createOrder(currentUser?.id ?: "", user.id, parsedItems!!)
+                                                }
+                                                committedActions.add(user.id)
                                             }
                                             val formattedOrder = parsedItems?.joinToString("\n") { "- ${it.first}: ${it.second}" } ?: ""
                                             val messageText = "Here is an order list:\n$formattedOrder"
@@ -327,7 +326,8 @@ fun GenerateOrderScreen(
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                     ) {
                                         Column(modifier = Modifier.padding(16.dp)) {
-                                            Text(user.name ?: "", fontWeight = FontWeight.Bold)
+                                            val displayName = (user.name ?: "") + if (user.id == currentUser?.id) " (You)" else ""
+                                            Text(displayName, fontWeight = FontWeight.Bold)
                                             if (!user.shopName.isNullOrBlank()) {
                                                 Text(user.shopName ?: "", style = MaterialTheme.typography.bodySmall)
                                             }
@@ -390,20 +390,17 @@ fun OrderDetailsScreen(
                         } ?: "") + 
                         "\n====================\nPlease confirm."
                     IconButton(onClick = {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, orderTextForWhatsApp)
-                            setPackage("com.whatsapp")
-                        }
-                        try {
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            // WhatsApp not installed fallback: share via any app (acts like a 'doc' generator depending on which app receives it)
-                            val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, orderTextForWhatsApp)
+                        val itemsList = orderWithDetails?.items?.map { Pair(it.name, it.quantity) } ?: emptyList()
+                        val pdfUri = PdfHelper.generateOrderPdf(context, itemsList, orderWithDetails?.buyer)
+                        if (pdfUri != null) {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/pdf"
+                                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(Intent.createChooser(fallbackIntent, "Share Order Document"))
+                            context.startActivity(Intent.createChooser(shareIntent, "Share PDF Order Document"))
+                        } else {
+                            android.widget.Toast.makeText(context, "Error generating PDF", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }) {
                         Icon(Icons.Default.Share, contentDescription = "Share Order Document")

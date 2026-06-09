@@ -27,7 +27,7 @@ object PdfHelper {
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, "Order_${System.currentTimeMillis()}.pdf")
                     put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + File.separator + "Orders")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
                 val resolver = context.contentResolver
@@ -41,21 +41,19 @@ object PdfHelper {
                     contentValues.clear()
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(uri, contentValues, null, null)
-                    Toast.makeText(context, "Saved to Downloads/Orders", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Saved to Downloads", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, "Could not create file in Downloads", Toast.LENGTH_SHORT).show()
                 }
             } else {
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val orderDir = File(downloadsDir, "Orders")
-                if (!orderDir.exists()) orderDir.mkdirs()
-                val destFile = File(orderDir, "Order_${System.currentTimeMillis()}.pdf")
+                val destFile = File(downloadsDir, "Order_${System.currentTimeMillis()}.pdf")
                 FileOutputStream(destFile).use { outputStream ->
                     context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
                         inputStream.copyTo(outputStream)
                     }
                 }
-                Toast.makeText(context, "Saved to Downloads/Orders", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Saved to Downloads", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             e.printStackTrace()

@@ -16,7 +16,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.InsertEmoticon
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -488,7 +488,7 @@ fun AttachmentMenu(onDismiss: () -> Unit, onClick: (String) -> Unit) {
         ) {
             Column(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    AttachmentIcon(icon = Icons.Default.InsertDriveFile, color = androidx.compose.ui.graphics.Color(0xFF5F66CD), text = "Document") { onClick("Document") }
+                    AttachmentIcon(icon = Icons.AutoMirrored.Filled.InsertDriveFile, color = androidx.compose.ui.graphics.Color(0xFF5F66CD), text = "Document") { onClick("Document") }
                     AttachmentIcon(icon = Icons.Default.CameraAlt, color = androidx.compose.ui.graphics.Color(0xFFD3396D), text = "Camera") { onClick("Camera") }
                     AttachmentIcon(icon = Icons.Default.Photo, color = androidx.compose.ui.graphics.Color(0xFFAC44CF), text = "Gallery") { onClick("Gallery") }
                 }

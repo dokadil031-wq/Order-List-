@@ -70,6 +70,32 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         }
     }
 
+    fun handlePhoneAuthSuccess(phone: String, name: String, pass: String, shopName: String, isRegister: Boolean, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (authUser != null) {
+                    var user = repository.getUserByPhone(phone)
+                    if (user == null && isRegister) {
+                        val fallbackEmail = authUser.email ?: "$phone@placeholder.com"
+                        user = repository.insertUserWithId(authUser.uid, name, fallbackEmail, phone, pass, shopName)
+                        setCurrentUser(user)
+                        onResult(true, "")
+                    } else if (user != null) {
+                        setCurrentUser(user)
+                        onResult(true, "")
+                    } else {
+                        onResult(false, "User not found. Please Sign Up.")
+                    }
+                } else {
+                    onResult(false, "Auth user is null")
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Unknown error")
+            }
+        }
+    }
+
     fun createUser(name: String, email: String = "", phone: String = "", pass: String = "", shopName: String = "", onResult: (Boolean, String) -> Unit) {
         val emailTrimmed = email.trim()
         val phoneTrimmed = phone.trim()
@@ -77,6 +103,26 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         
         viewModelScope.launch {
             try {
+                // Pre-check basic formatting
+                if (emailTrimmed.isNotBlank()) {
+                    try {
+                        val authResult = auth.createUserWithEmailAndPassword(emailTrimmed, pass).await()
+                        val userId = authResult.user?.uid ?: java.util.UUID.randomUUID().toString()
+                        val user = repository.insertUserWithId(userId, name, emailTrimmed, phoneTrimmed, pass, shopName)
+                        setCurrentUser(user)
+                        onResult(true, "")
+                        return@launch
+                    } catch (e: Exception) {
+                        try {
+                            auth.signInWithEmailAndPassword(emailTrimmed, pass).await()
+                            // If signed in successfully, maybe the user exists in Firebase Auth but not DB.
+                        } catch (e2: Exception) {
+                            android.util.Log.e("FirebaseAuth", "Auth failed: ${e.message}")
+                            // We don't return here so we could fall back to anonymous / DB logic (which might fail if rules strict)
+                        }
+                    }
+                }
+                
                 if (auth.currentUser == null) {
                     try { auth.signInAnonymously().await() } catch (e: Exception) {}
                 }
@@ -96,7 +142,7 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     setCurrentUser(user)
                     onResult(true, "")
                 } catch (e: Exception) {
-                    android.util.Log.e("FirebaseAuth", "Auth failed: ${e.message}")
+                    android.util.Log.e("FirebaseAuth", "Auth failed fallback: ${e.message}")
                     val user = repository.insertUser(name, emailTrimmed, phoneTrimmed, pass, shopName)
                     setCurrentUser(user)
                     onResult(true, "")
@@ -113,13 +159,30 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         
         viewModelScope.launch {
             try {
-                if (auth.currentUser == null) {
-                    try { auth.signInAnonymously().await() } catch (e: Exception) {}
-                }
-                val user = if (identifier.contains("@")) {
-                    repository.getUserByEmail(identifier)
+                var user: User? = null
+                
+                if (identifier.contains("@")) {
+                    try {
+                        auth.signInWithEmailAndPassword(identifier, pass).await()
+                    } catch (e: Exception) {
+                        try {
+                            auth.createUserWithEmailAndPassword(identifier, pass).await()
+                        } catch (e2: Exception) {
+                            android.util.Log.e("FirebaseAuth", "Migration failed: ${e2.message}")
+                        }
+                    }
+                    
+                    val authUser = auth.currentUser
+                    if (authUser != null) {
+                        user = repository.getUserById(authUser.uid) ?: repository.getUserByEmail(identifier)
+                    } else {
+                        user = repository.getUserByEmail(identifier)
+                    }
                 } else {
-                    repository.getUserByPhone(identifier)
+                    if (auth.currentUser == null) {
+                        try { auth.signInAnonymously().await() } catch (e: Exception) {}
+                    }
+                    user = repository.getUserByPhone(identifier)
                 }
                 
                 if (user == null) {
@@ -127,13 +190,15 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                 } else if (user.password != pass) {
                     onResult(false, "Incorrect password")
                 } else {
-                    try {
-                        auth.signInWithEmailAndPassword(user.email, pass).await()
-                    } catch (e: Exception) {
+                    if (!identifier.contains("@")) {
                         try {
-                            auth.createUserWithEmailAndPassword(user.email, pass).await()
-                        } catch (e2: Exception) {
-                            android.util.Log.e("FirebaseAuth", "Migration failed: ${e2.message}")
+                            auth.signInWithEmailAndPassword(user.email, pass).await()
+                        } catch (e: Exception) {
+                            try {
+                                auth.createUserWithEmailAndPassword(user.email, pass).await()
+                            } catch (e2: Exception) {
+                                android.util.Log.e("FirebaseAuth", "Migration fallback failed: ${e2.message}")
+                            }
                         }
                     }
                     setCurrentUser(user)
@@ -163,12 +228,15 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onResult(false, "User not found")
                 } else {
                     try {
+                        try {
+                            auth.signInWithEmailAndPassword(user.email, user.password).await()
+                        } catch (e: Exception) { }
+                        
                         val success = repository.updatePassword(user.id, newPass)
                         if (success) {
                             try {
-                                auth.signInWithEmailAndPassword(user.email, user.password).await()
                                 auth.currentUser?.updatePassword(newPass)?.let { it.await() }
-                            } catch (e: Exception) {}
+                            } catch (e: Exception) { }
                             onResult(true, "Password updated successfully")
                         } else {
                             onResult(false, "Failed to update password")
@@ -300,6 +368,7 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val recentChatUserIds: kotlinx.coroutines.flow.Flow<List<String>> = _currentUser.flatMapLatest { user ->
         if (user == null) {
             kotlinx.coroutines.flow.flowOf(emptyList())
@@ -308,6 +377,7 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val unreadChatUserIds: kotlinx.coroutines.flow.Flow<List<String>> = _currentUser.flatMapLatest { user ->
         if (user == null) {
             kotlinx.coroutines.flow.flowOf(emptyList())

@@ -1,5 +1,25 @@
 {
   "rules": {
+    "users": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["email", "phoneNumber", "type"]
+    },
+    "orders": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["sellerId", "buyerId", "status"]
+    },
+    "order_items": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["orderId"]
+    },
+    "messages": {
+       ".read": "auth != null",
+       ".write": "auth != null",
+       ".indexOn": ["chatId"]
+    },
     ".read": "auth != null",
     ".write": "auth != null"
   }
