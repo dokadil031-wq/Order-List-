@@ -91,7 +91,12 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onResult(false, "Auth user is null")
                 }
             } catch (e: Exception) {
-                onResult(false, e.message ?: "Unknown error")
+                val msg = e.message ?: "Unknown error"
+                if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                    onResult(false, "Firebase Configuration Error: API Key not valid. Please configure a real google-services.json file.")
+                } else {
+                    onResult(false, msg)
+                }
             }
         }
     }
@@ -143,12 +148,26 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onResult(true, "")
                 } catch (e: Exception) {
                     android.util.Log.e("FirebaseAuth", "Auth failed fallback: ${e.message}")
-                    val user = repository.insertUser(name, emailTrimmed, phoneTrimmed, pass, shopName)
-                    setCurrentUser(user)
-                    onResult(true, "")
+                    try {
+                        val user = repository.insertUser(name, emailTrimmed, phoneTrimmed, pass, shopName)
+                        setCurrentUser(user)
+                        onResult(true, "")
+                    } catch (e2: Exception) {
+                        val msg = e2.message ?: e.message ?: "Unknown error"
+                        if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                            onResult(false, "Firebase Configuration Error: API Key not valid. Please ensure you have added a valid google-services.json file or updated the dummy-api-key.")
+                        } else {
+                            onResult(false, msg)
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                onResult(false, e.message ?: "Unknown error")
+                val msg = e.message ?: "Unknown error"
+                if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                    onResult(false, "Firebase Configuration Error: API Key not valid. Please configure a real google-services.json file.")
+                } else {
+                    onResult(false, msg)
+                }
             }
         }
     }
@@ -205,7 +224,12 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                     onResult(true, "")
                 }
             } catch (e: Exception) {
-                onResult(false, e.message ?: "Authentication error")
+                val msg = e.message ?: "Authentication error"
+                if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                    onResult(false, "Firebase Configuration Error: API Key not valid. Please configure a real google-services.json file.")
+                } else {
+                    onResult(false, msg)
+                }
             }
         }
     }
@@ -242,11 +266,21 @@ class OrderListViewModel(private val repository: AppRepository, private val pref
                             onResult(false, "Failed to update password")
                         }
                     } catch (e: Exception) {
-                        onResult(false, e.message ?: "Failed to update password")
+                        val msg = e.message ?: "Failed to update password"
+                        if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                            onResult(false, "Firebase Configuration Error: API Key not valid. Please configure a real google-services.json file.")
+                        } else {
+                            onResult(false, msg)
+                        }
                     }
                 }
             } catch (e: Exception) {
-                onResult(false, e.message ?: "Error updating password")
+                val msg = e.message ?: "Error updating password"
+                if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                    onResult(false, "Firebase Configuration Error: API Key not valid. Please configure a real google-services.json file.")
+                } else {
+                    onResult(false, msg)
+                }
             }
         }
     }

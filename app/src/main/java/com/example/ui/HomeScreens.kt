@@ -395,7 +395,12 @@ fun LoginScreen(
                                                     }
                                                     override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
                                                         isLoading = false
-                                                        errorMessage = "Verification failed test. Please rely on email log-in if console doesn't accept phone auth: ${e.localizedMessage}"
+                                                        val msg = e.localizedMessage ?: ""
+                                                        if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                                                            errorMessage = "Firebase Configuration Error: API Key not valid. Please upload a real google-services.json file via AI Studio."
+                                                        } else {
+                                                            errorMessage = "Verification failed: $msg"
+                                                        }
                                                     }
                                                     override fun onCodeSent(vId: String, token: com.google.firebase.auth.PhoneAuthProvider.ForceResendingToken) {
                                                         isLoading = false
@@ -440,7 +445,12 @@ fun LoginScreen(
                                                     }
                                                     override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
                                                         isLoading = false
-                                                        errorMessage = "Verification failed. Rely on email auth if unconfigured: ${e.localizedMessage}"
+                                                        val msg = e.localizedMessage ?: ""
+                                                        if (msg.contains("API key not valid", ignoreCase = true) || msg.contains("API_KEY_INVALID", ignoreCase = true)) {
+                                                            errorMessage = "Firebase Configuration Error: API Key not valid. Please upload a real google-services.json file via AI Studio."
+                                                        } else {
+                                                            errorMessage = "Verification failed: $msg"
+                                                        }
                                                     }
                                                     override fun onCodeSent(vId: String, token: com.google.firebase.auth.PhoneAuthProvider.ForceResendingToken) {
                                                         isLoading = false
@@ -852,18 +862,19 @@ fun GlobalSearchContent(
         }
     }
 
-    val filteredUnmatchedContacts = remember(localContacts, globalQuery, allAppUsers) {
+    val filteredUnmatchedContacts = remember(localContacts, globalQuery, allUsers) {
         val query = globalQuery.trim()
         val normalizedQuery = query.filter { it.isDigit() }
-        val appUserPhones = allAppUsers.mapNotNull { it.phoneNumber?.filter { c -> c.isDigit() }?.takeLast(10) }.toSet()
+        val appUserPhones = allUsers.mapNotNull { it.phoneNumber?.filter { c -> c.isDigit() }?.takeLast(10) }.toSet()
         
         val unmatched = localContacts.filter { contact ->
-            val contactPhone = contact.second
+            val contactPhoneStr = contact.second ?: ""
+            val contactPhone = contactPhoneStr.filter { c -> c.isDigit() }.takeLast(10)
             !appUserPhones.contains(contactPhone)
         }
         
         if (query.isBlank()) unmatched else unmatched.filter {
-            val contactPhone = it.second
+            val contactPhone = it.second.filter { c -> c.isDigit() }.takeLast(10)
             it.first.contains(query, ignoreCase = true) || 
             it.second.contains(query, ignoreCase = true) ||
             (normalizedQuery.isNotBlank() && contactPhone.contains(normalizedQuery))
